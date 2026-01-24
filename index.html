@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyAudioEqApp</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #e0e0e0; padding: 20px; display: flex; justify-content: center; }
+        .app-container { width: 100%; max-width: 500px; background: #1e1e1e; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { text-align: center; color: #0078d4; margin-bottom: 25px; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        button { background: #333; color: white; border: none; padding: 12px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background: #0078d4; }
+        .song-list-container { background: #252525; border-radius: 8px; max-height: 300px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #333; }
+        #songList { list-style: none; padding: 0; margin: 0; }
+        #songList li { padding: 12px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        #songList li:last-child { border-bottom: none; }
+        .audio-player { width: 100%; margin-top: 10px; border-radius: 8px; }
+        input[type="file"] { display: none; }
+        .status-msg { font-size: 0.85em; text-align: center; color: #888; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <h1>MyAudioEqApp</h1>
+
+    <div class="controls">
+        <button onclick="document.getElementById('audioInput').click()">➕ Add Songs</button>
+        <button onclick="exportData()" style="background: #2d5a27;">💾 Save Backup</button>
+        
+        <button onclick="document.getElementById('importInput').click()">📂 Load Backup</button>
+        <button onclick="clearAll()" style="background: #a33131;">🗑️ Clear All</button>
+    </div>
+
+    <input type="file" id="audioInput" accept="audio/*" multiple onchange="handleAudioUpload(event)">
+    <input type="file" id="importInput" accept=".json" onchange="importData(event)">
+
+    <div class="song-list-container">
+        <ul id="songList">
+            <li style="color: #666; justify-content: center;">No songs loaded.</li>
+        </ul>
+    </div>
+
+    <audio id="player" controls class="audio-player"></audio>
+    <div id="status" class="status-msg">Ready</div>
+</div>
+
+<script>
+    let playlist = [];
+
+    // Load from LocalStorage on refresh
+    window.onload = () => {
+        const savedData = localStorage.getItem('myAudioApp_data');
+        if (savedData) {
+            playlist = JSON.parse(savedData);
+            renderPlaylist();
+        }
+    };
+
+    // Handle selecting new music files
+    async function handleAudioUpload(event) {
+        const files = event.target.files;
+        for (let file of files) {
+            const base64 = await convertToBase64(file);
+            playlist.push({
+                id: Date.now() + Math.random(),
+                name: file.name,
+                data: base64 // Store the actual audio data for backup
+            });
+        }
+        updateStorage();
+    }
+
+    // Convert file to Base64 string so it can be saved in JSON
+    function convertToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
+    }
+
+    // UPDATED: Export logic to create a downloadable .json file containing ALL songs
+    function exportData() {
+        if (playlist.length === 0) return alert("Nothing to backup!");
+        
+        const dataStr = JSON.stringify(playlist);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `MyAudioBackup_${new Date().toLocaleDateString()}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        document.getElementById('status').innerText = "Backup saved to downloads!";
+    }
+
+    // UPDATED: Import logic to read the backup file and restore the playlist
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (Array.isArray(imported)) {
+                    playlist = imported;
+                    updateStorage();
+                    alert("Backup loaded successfully!");
+                }
+            } catch (err) {
+                alert("Invalid backup file.");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function renderPlaylist() {
+        const listContainer = document.getElementById('songList');
+        if (playlist.length === 0) {
+            listContainer.innerHTML = '<li style="color: #666; justify-content: center;">No songs loaded.</li>';
+            return;
+        }
+
+        listContainer.innerHTML = playlist.map(song => `
+            <li>
+                <span>${song.name.substring(0, 30)}${song.name.length > 30 ? '...' : ''}</span>
+                <button onclick="playSong('${song.id}')" style="padding: 5px 10px; font-size: 0.8em;">▶️ Play</button>
+            </li>
+        `).join('');
+    }
+
+    function playSong(id) {
+        const song = playlist.find(s => s.id == id);
+        if (song) {
+            const player = document.getElementById('player');
+            player.src = song.data;
+            player.play();
+            document.getElementById('status').innerText = "Playing: " + song.name;
+        }
+    }
+
+    function updateStorage() {
+        localStorage.setItem('myAudioApp_data', JSON.stringify(playlist));
+        renderPlaylist();
+    }
+
+    function clearAll() {
+        if(confirm("Delete all songs and data?")) {
+            playlist = [];
+            localStorage.removeItem('myAudioApp_data');
+            renderPlaylist();
+            document.getElementById('player').src = "";
+            document.getElementById('status').innerText = "All cleared.";
+        }
+    }
+
+    // Register Service Worker for offline use (if your sw.js exists)
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').then(() => {
+            console.log("Service Worker Active");
+        });
+    }
+</script>
+
+</body>
+</html>
