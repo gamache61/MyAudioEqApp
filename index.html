@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>MyAudioEqApp</title>
+    <link rel="manifest" id="my-manifest" href="manifest.json?v=2">
+    <meta name="theme-color" content="#121212">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: radial-gradient(120% 120% at 50% 10%, #1e1e2f 0%, #121212 60%); color: white; margin: 0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; overflow-y: auto; overflow-x: hidden; }
+        .player-container { width: 100%; max-width: 400px; background: #1e1e1e; padding: 20px; border-radius: 20px; text-align: center; margin: 20px 10px 50px 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; overflow: hidden; }
+
+        /* ===== LANDING SCREEN - CENTERED WITH FLOATING NOTES ===== */
+        #landingWrap { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 88vh; position: relative; z-index: 2; padding: 20px 0; transition: all 0.5s ease; }
+        #landingWrap.hidden { display: none !important; }
+        .header-row { display: flex; justify-content: center; align-items: center; margin-bottom: 28px; position: relative; z-index: 3; }
+        h1 { margin: 0; font-size: 26px; color: #bb86fc; letter-spacing: 1.5px; text-shadow: 0 0 20px rgba(187,134,252,0.6); animation: pulseGlow 2.5s infinite alternate; }
+        @keyframes pulseGlow { from { text-shadow: 0 0 12px rgba(187,134,252,0.4); } to { text-shadow: 0 0 28px rgba(187,134,252,0.9), 0 0 40px rgba(187,134,252,0.3); } }
+        .status-light { width: 14px; height: 14px; border-radius: 50%; background-color: #ff3b30; box-shadow: 0 0 10px #ff3b30; position: absolute; right: -24px; top: 50%; transform: translateY(-50%); transition: 0.3s; border: 2px solid #333; }
+        .status-light.green { background-color: #00ff66; box-shadow: 0 0 18px #00ff66; }
+
+        .logo-icon { font-size: 64px; margin-bottom: 18px; animation: floatLogo 3s ease-in-out infinite; filter: drop-shadow(0 0 18px rgba(187,134,252,0.6)); }
+        @keyframes floatLogo { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        .tagline { font-size: 12px; color: #888; letter-spacing: 2px; margin-bottom: 36px; text-transform: uppercase; }
+        #startBtn { background: linear-gradient(135deg, #bb86fc 0%, #7c4dff 100%); color: white; font-weight: bold; font-size: 17px; padding: 20px 32px; width: 100%; max-width: 300px; border: none; border-radius: 16px; cursor: pointer; box-shadow: 0 8px 28px rgba(187,134,252,0.4), inset 0 1px 0 rgba(255,255,255,0.2); transition: transform 0.15s, box-shadow 0.2s; position: relative; z-index: 3; letter-spacing: 0.5px; }
+        #startBtn:active { transform: scale(0.97); }
+        #startBtn:hover { box-shadow: 0 12px 36px rgba(187,134,252,0.6), inset 0 1px 0 rgba(255,255,255,0.2); transform: translateY(-1px); }
+
+        /* floating music notes */
+        .notes-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+        .note { position: absolute; bottom: -40px; font-size: 22px; opacity: 0; animation: floatUp linear infinite; user-select: none; }
+        @keyframes floatUp {
+            0% { transform: translateY(0) translateX(0) rotate(0deg) scale(0.8); opacity: 0; }
+            10% { opacity: 0.9; }
+            80% { opacity: 0.7; }
+            100% { transform: translateY(-95vh) translateX(var(--drift, 30px)) rotate(var(--rot, 20deg)) scale(1.3); opacity: 0; }
+        }
+
+        .hidden { display: none !important; }
+        .category-box, .backup-box { background: #2a2a2a; padding: 15px; border-radius: 15px; margin-bottom: 15px; border: 1px solid #444; }
+        .cat-row, .backup-row { display: flex; gap: 8px; margin-top: 10px; }
+        #catSelect { flex-grow: 1; padding: 10px; background: #121212; color: #03dac6; border: 1px solid #03dac6; border-radius: 8px; font-weight: bold; }
+        .btn-small { padding: 8px 12px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; font-size: 12px; }
+        .btn-add { background: #03dac6; color: #000; }
+        .btn-del { background: #cf6679; color: #fff; }
+        .btn-backup { background: #444; color: #bbb; border: 1px solid #666; flex: 1; padding: 10px; cursor: pointer; border-radius: 8px; font-size: 11px; font-weight: bold; }
+        #masterPlayBtn { width: 85px; height: 85px; border-radius: 50%; background: #2a2a2a; border: 4px solid #555; color: white; font-size: 35px; cursor: pointer; margin: 20px auto; display: flex; justify-content: center; align-items: center; transition: transform 0.1s, background 0.3s; }
+        #masterPlayBtn.playing { background: #bb86fc; color: #000; border-color: #bb86fc; box-shadow: 0 0 25px rgba(187,134,252,0.4); }
+        .file-controls { display: flex; flex-direction: column; gap: 10px; margin: 15px 0; }
+        .custom-file-upload { background: #bb86fc; padding: 14px; cursor: pointer; border-radius: 12px; color: #000; font-size: 14px; font-weight: bold; display: block; }
+        input[type="file"] { display: none; }
+        .library-row { display: flex; gap: 5px; margin-bottom: 15px; }
+        #librarySelect { flex-grow: 1; padding: 12px; border-radius: 10px; background: #2a2a2a; color: white; border: 1px solid #444; }
+        #deleteBtn { background: #cf6679; border: none; border-radius: 10px; cursor: pointer; width: 50px; font-size: 18px; }
+        #songTitle { font-size: 14px; color: #bb86fc; margin: 10px 0 5px 0; font-weight: 500; min-height: 1.2em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .progress-container { width: 100%; height: 6px; background: #333; border-radius: 3px; margin-bottom: 15px; overflow: hidden; }
+        #progressBar { width: 0%; height: 100%; background: #03dac6; transition: width 0.2s; }
+
+        /* Tall single visualizer - knobs fixed on bars */
+        .eq-grid { display: flex; justify-content: space-between; height: 420px; margin: 15px 0 10px 0; position: relative; background: #141414; border-radius: 18px; padding: 10px 6px 32px 6px; border: 1px solid #222; box-shadow: inset 0 0 25px rgba(0,0,0,0.8); overflow: visible; }
+        .eq-band { position: relative; width: 18%; height: 100%; display: flex; justify-content: center; }
+        .seg-column { position: absolute; top: 14px; bottom: 46px; left: 50%; transform: translateX(-50%); width: 32px; display: flex; flex-direction: column-reverse; gap: 4px; z-index: 1; }
+        .seg { width: 100%; height: 7px; min-height: 7px; border-radius: 3px; background: #222; opacity: 0.28; transition: background 0.06s, opacity 0.06s, box-shadow 0.06s; }
+        .seg.on { opacity: 1; box-shadow: 0 0 10px currentColor; }
+        .seg.on.low { background: linear-gradient(90deg, #00e5ff, #00b8d4); color: #00e5ff; }
+        .seg.on.mid-low { background: linear-gradient(90deg, #448aff, #2979ff); color: #448aff; }
+        .seg.on.mid { background: linear-gradient(90deg, #8c6bff, #7c4dff); color: #8c6bff; }
+        .seg.on.mid-high { background: linear-gradient(90deg, #c16bff, #ab47bc); color: #c16bff; }
+        .seg.on.high { background: linear-gradient(90deg, #ea80fc, #e040fb); color: #ea80fc; }
+        .slider-wrap { position: absolute; top: 14px; bottom: 46px; left: 50%; width: 40px; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; justify-content: center; }
+        input[type=range].vertical { -webkit-appearance: none; appearance: none; width: 320px; height: 40px; background: transparent; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-90deg); margin: 0; z-index: 6; }
+        input[type=range].vertical::-webkit-slider-runnable-track { height: 4px; background: transparent; }
+        input[type=range].vertical::-webkit-slider-thumb { -webkit-appearance: none; height: 28px; width: 28px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #dcc8ff, #a67eff 55%, #7c3dff); border: 2px solid #111; cursor: pointer; box-shadow: 0 0 14px rgba(166,126,255,0.9), 0 2px 6px rgba(0,0,0,0.7); margin-top: -12px; }
+        input[type=range].vertical::-moz-range-track { height: 4px; background: transparent; }
+        input[type=range].vertical::-moz-range-thumb { height: 28px; width: 28px; border-radius: 50%; background: #a67eff; border: 2px solid #111; cursor: pointer; }
+        .band-label { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); font-size: 11px; color: #8a7aaa; font-weight: bold; letter-spacing: 1px; z-index: 2; white-space: nowrap; }
+        .band-label.glow { color: #bb86fc; text-shadow: 0 0 12px #bb86fc; }
+        audio { width: 100%; filter: invert(1); opacity: 0.3; height: 30px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="player-container">
+        <div id="landingWrap">
+            <div class="notes-layer" id="notesLayer"></div>
+            <div class="logo-icon">🎚️</div>
+            <div class="header-row"><h1>MyAudioEqApp</h1><div id="statusLight" class="status-light"></div></div>
+            <div class="tagline">Feel the music • Shape the sound</div>
+            <button id="startBtn" onclick="initAudioEngine()">👉 ACTIVATE AUDIO ENGINE</button>
+            <div style="margin-top:22px; font-size:11px; color:#555;">Tap to start • Floating beats await</div>
+        </div>
+
+        <div id="controlsArea" class="hidden">
+            <div class="category-box">
+                <div style="font-size: 11px; color: #aaa; text-align: left; margin-bottom: 5px; font-weight: bold;">ACTIVE CATEGORY:</div>
+                <div class="cat-row">
+                    <select id="catSelect" onchange="refreshLibrary()"><option value="All Songs">All Songs</option></select>
+                    <button class="btn-small btn-add" onclick="addCategory()">+</button>
+                    <button class="btn-small btn-del" onclick="removeCategory()">-</button>
+                </div>
+            </div>
+            <div class="backup-box">
+                <div style="font-size: 11px; color: #aaa; text-align: left; font-weight: bold;">DATA MANAGEMENT:</div>
+                <div class="backup-row">
+                    <button class="btn-backup" onclick="exportData()">💾 SAVE BACKUP</button>
+                    <button class="btn-backup" onclick="document.getElementById('importFile').click()">📂 LOAD BACKUP</button>
+                    <input type="file" id="importFile" accept=".myaudio" onchange="importData(event)">
+                </div>
+            </div>
+            <div class="file-controls">
+                <label for="audioFile" class="custom-file-upload">📂 Add Songs to Category</label>
+                <input type="file" id="audioFile" multiple accept=".mp3, .wav, .m4a, audio/*">
+            </div>
+            <div class="library-row">
+                <select id="librarySelect" onchange="loadFromLibrary()"><option value="">📂 Loading Library...</option></select>
+                <button id="deleteBtn" onclick="deleteSong()">🗑️</button>
+            </div>
+            <div id="songTitle">⚠️ No song selected</div>
+            <div class="progress-container"><div id="progressBar"></div></div>
+            <br><br>
+            <button id="masterPlayBtn" onclick="forcePlay()">▶</button><br><br>
+            <div class="eq-grid" id="eqGrid"></div>
+            <audio id="audioPlayer" crossorigin="anonymous"></audio>
+            <div style="font-size: 9px; color: #444; margin-top: 10px;">v1.0.1.4 - Landing + Fixed EQ</div>
+        </div>
+    </div>
+<script>
+        const audioPlayer = document.getElementById('audioPlayer');
+        const startBtn = document.getElementById('startBtn');
+        const landingWrap = document.getElementById('landingWrap');
+        const controlsArea = document.getElementById('controlsArea');
+        const masterPlayBtn = document.getElementById('masterPlayBtn');
+        const librarySelect = document.getElementById('librarySelect');
+        const catSelect = document.getElementById('catSelect');
+        const statusLight = document.getElementById('statusLight');
+        const songTitleDisplay = document.getElementById('songTitle');
+        const progressBar = document.getElementById('progressBar');
+        const eqIds = ['eq60', 'eq250', 'eq1000', 'eq4000', 'eq12000'];
+        const frequencies = [60, 250, 1000, 4000, 12000];
+        const bandNames = ['SUB','LOW','MID','HIGH','AIR'];
+        let audioContext, source, db, filters = [], analyser, dataArray, vizAnimId;
+        let isFileLoaded = false;
+        let currentBlobUrl = null;
+        const SEG_COUNT = 30;
+
+        // floating notes generator for landing
+        function spawnNotes(){
+            const layer = document.getElementById('notesLayer');
+            if(!layer) return;
+            const emojis = ['🎵','🎶','🎧','🎚️','🎤','🎼','💜','✨'];
+            const colors = ['#bb86fc','#03dac6','#ff80ab','#ffd740','#69f0ae','#82b1ff'];
+            setInterval(()=>{
+                if(landingWrap.classList.contains('hidden')) return;
+                const n = document.createElement('div');
+                n.className = 'note';
+                n.textContent = emojis[Math.floor(Math.random()*emojis.length)];
+                n.style.left = (Math.random()*90+5)+'%';
+                n.style.fontSize = (16+Math.random()*22)+'px';
+                n.style.color = colors[Math.floor(Math.random()*colors.length)];
+                n.style.animationDuration = (4+Math.random()*5)+'s';
+                n.style.setProperty('--drift', (Math.random()*80-40)+'px');
+                n.style.setProperty('--rot', (Math.random()*60-30)+'deg');
+                n.style.animationDelay = (Math.random()*0.5)+'s';
+                layer.appendChild(n);
+                setTimeout(()=> n.remove(), 9000);
+            }, 420);
+            // initial burst
+            for(let i=0;i<8;i++){
+                setTimeout(()=>{
+                    const n = document.createElement('div');
+                    n.className = 'note';
+                    n.textContent = emojis[i%emojis.length];
+                    n.style.left = (Math.random()*90+5)+'%';
+                    n.style.fontSize = (18+Math.random()*18)+'px';
+                    n.style.color = colors[i%colors.length];
+                    n.style.animationDuration = (3+Math.random()*4)+'s';
+                    n.style.setProperty('--drift', (Math.random()*60-30)+'px');
+                    n.style.setProperty('--rot', (Math.random()*40-20)+'deg');
+                    layer.appendChild(n);
+                    setTimeout(()=> n.remove(), 8000);
+                }, i*200);
+            }
+        }
+        spawnNotes();
+
+        function buildEQ(){
+            const grid = document.getElementById('eqGrid');
+            grid.innerHTML = '';
+            bandNames.forEach((name, idx)=>{
+                const band = document.createElement('div');
+                band.className = 'eq-band';
+                const col = document.createElement('div');
+                col.className = 'seg-column';
+                col.id = 'col-'+eqIds[idx];
+                for(let s=0;s<SEG_COUNT;s++){
+                    const seg = document.createElement('div');
+                    seg.className = 'seg';
+                    seg.id = `seg-${idx}-${s}`;
+                    col.appendChild(seg);
+                }
+                const wrap = document.createElement('div');
+                wrap.className = 'slider-wrap';
+                const input = document.createElement('input');
+                input.type = 'range';
+                input.className = 'vertical';
+                input.id = eqIds[idx];
+                input.min = -15; input.max = 15; input.value = 0;
+                wrap.appendChild(input);
+                const label = document.createElement('span');
+                label.className = 'band-label';
+                label.id = 'label-'+eqIds[idx];
+                label.textContent = name;
+                band.appendChild(col);
+                band.appendChild(wrap);
+                band.appendChild(label);
+                grid.appendChild(band);
+            });
+            eqIds.forEach((id, i) => { 
+                document.getElementById(id).oninput = function() { 
+                    if(filters[i]) filters[i].gain.value = this.value; 
+                }; 
+            });
+        }
+        buildEQ();
+
+        function initAudioEngine() { 
+            try { 
+                const AC = window.AudioContext || window.webkitAudioContext; 
+                audioContext = new AC(); 
+                if (audioContext.state === 'suspended') audioContext.resume();
+                landingWrap.classList.add('hidden');
+                controlsArea.classList.remove('hidden'); 
+                setupDB(); 
+            } catch (e) { alert("Engine Error: " + e.message); } 
+        }
+        function setupDB() { 
+            const request = indexedDB.open("MyEqLib", 2); 
+            request.onsuccess = e => { 
+                db = e.target.result; 
+                const tx = db.transaction("songs", "readwrite");
+                const store = tx.objectStore("songs");
+                store.getAll().onsuccess = ev => {
+                    const songs = ev.target.result;
+                    const seen = new Set();
+                    songs.forEach(s => {
+                        const identifier = `${s.name}-${s.category}`;
+                        if (seen.has(identifier)) { store.delete(s.id); } else { seen.add(identifier); }
+                    });
+                };
+                tx.oncomplete = () => refreshLibrary();
+            }; 
+            request.onupgradeneeded = e => { e.target.result.createObjectStore("songs", { keyPath: "id" }); };
+        }
+        function loadFromLibrary() { 
+            const id = parseFloat(librarySelect.value); 
+            if(!id) { isFileLoaded = false; songTitleDisplay.textContent = "⚠️ No song selected"; progressBar.style.width = "0%"; return; } 
+            db.transaction("songs").objectStore("songs").get(id).onsuccess = e => { 
+                const song = e.target.result;
+                if(song) {
+                    isFileLoaded = false; songTitleDisplay.textContent = "⌛ Loading: " + song.name; progressBar.style.width = "10%";
+                    if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+                    currentBlobUrl = URL.createObjectURL(song.data);
+                    audioPlayer.pause(); audioPlayer.src = currentBlobUrl; audioPlayer.load();
+                    audioPlayer.oncanplaythrough = () => { isFileLoaded = true; progressBar.style.width = "100%"; songTitleDisplay.textContent = "✅ Ready: " + song.name; };
+                }
+            }; 
+        }
+        function forcePlay() { 
+            if (!isFileLoaded || !audioPlayer.src) { alert("Please select a song from the library first."); return; }
+            if(audioContext.state === 'suspended') audioContext.resume();
+            if (!source) {
+                try {
+                    source = audioContext.createMediaElementSource(audioPlayer); 
+                    filters = frequencies.map((freq, i) => { 
+                        const f = audioContext.createBiquadFilter(); 
+                        f.type = i === 0 ? 'lowshelf' : i === 4 ? 'highshelf' : 'peaking'; 
+                        f.frequency.value = freq; 
+                        f.gain.value = document.getElementById(eqIds[i]).value; 
+                        return f; 
+                    }); 
+                    analyser = audioContext.createAnalyser(); analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.78; dataArray = new Uint8Array(analyser.frequencyBinCount);
+                    let node = source; filters.forEach(f => { node.connect(f); node = f; }); node.connect(analyser); analyser.connect(audioContext.destination); 
+                } catch (err) { console.error(err); }
+            }
+            if (audioPlayer.paused) { audioPlayer.play().catch(e => alert("Tap 'Ready' song again.")); } else { audioPlayer.pause(); }
+        }
+        function updateUI(playing) { masterPlayBtn.innerHTML = playing ? "⏸" : "▶"; masterPlayBtn.classList.toggle('playing', playing); statusLight.classList.toggle('green', playing); if(playing) startVizLoop(); else stopVizLoop(); }
+        audioPlayer.onplay = () => updateUI(true); 
+        audioPlayer.onpause = () => updateUI(false); 
+        audioPlayer.onended = () => {
+            updateUI(false);
+            const currentIndex = librarySelect.selectedIndex;
+            if (currentIndex !== -1 && librarySelect.options.length > 1) {
+                let nextIndex = currentIndex + 1; if (nextIndex >= librarySelect.options.length) nextIndex = 1;
+                librarySelect.selectedIndex = nextIndex; loadFromLibrary();
+                const checkReady = setInterval(() => { if (isFileLoaded) { clearInterval(checkReady); forcePlay(); } }, 100);
+            }
+        };
+        audioPlayer.ontimeupdate = () => { if (audioPlayer.duration) { const perc = (audioPlayer.currentTime / audioPlayer.duration) * 100; progressBar.style.width = perc + "%"; } };
+        function startVizLoop(){
+            if(vizAnimId) cancelAnimationFrame(vizAnimId);
+            const freqToBin = (freq) => Math.floor(freq / (audioContext.sampleRate/2) * dataArray.length);
+            const bands = [{from:20, to:150, idx:0},{from:150, to:600, idx:1},{from:600, to:2500, idx:2},{from:2500, to:7000, idx:3},{from:7000, to:16000, idx:4},];
+            const draw = () => {
+                vizAnimId = requestAnimationFrame(draw);
+                if(!analyser || !dataArray) return;
+                analyser.getByteFrequencyData(dataArray);
+                bands.forEach(b=>{
+                    const s = freqToBin(b.from); const e = freqToBin(b.to);
+                    let sum=0, c=0; for(let k=s;k<=e && k<dataArray.length;k++){ sum+=dataArray[k]; c++; }
+                    let avg = c? sum/c : 0;
+                    let litCount = Math.min(SEG_COUNT, Math.floor((avg/255) * SEG_COUNT * 1.25));
+                    for(let seg=0; seg<SEG_COUNT; seg++){
+                        const el = document.getElementById(`seg-${b.idx}-${seg}`);
+                        if(!el) continue;
+                        if(seg < litCount){
+                            const ratio = seg / SEG_COUNT;
+                            if(ratio < 0.25) el.className = 'seg on low';
+                            else if(ratio < 0.5) el.className = 'seg on mid-low';
+                            else if(ratio < 0.7) el.className = 'seg on mid';
+                            else if(ratio < 0.85) el.className = 'seg on mid-high';
+                            else el.className = 'seg on high';
+                        } else { el.className = 'seg'; }
+                    }
+                    const label = document.getElementById('label-'+eqIds[b.idx]);
+                    if(label) label.classList.toggle('glow', avg > 90);
+                });
+            }; draw();
+        }
+        function stopVizLoop(){
+            if(vizAnimId) cancelAnimationFrame(vizAnimId);
+            for(let i=0;i<5;i++){ for(let s=0;s<SEG_COUNT;s++){ const el = document.getElementById(`seg-${i}-${s}`); if(el) el.className = 'seg'; } const label = document.getElementById('label-'+eqIds[i]); if(label) label.classList.remove('glow'); }
+        }
+        function refreshLibrary() { 
+            if (!db) return; 
+            const store = db.transaction("songs").objectStore("songs");
+            const currentCat = catSelect.value; 
+            store.getAll().onsuccess = e => { 
+                let songs = e.target.result; 
+                if (currentCat !== "All Songs") songs = songs.filter(s => s.category === currentCat); 
+                librarySelect.innerHTML = `<option value="">📂 Select a song below...</option>`; 
+                songs.sort((a,b) => a.name.localeCompare(b.name)).forEach(s => { const opt = document.createElement('option'); opt.value = s.id; opt.text = s.name; librarySelect.appendChild(opt); }); 
+            }; 
+        }
+        function addCategory() { const name = prompt("Category Name:"); if (name) { const cats = JSON.parse(localStorage.getItem('myAudioEqCategories') || '["All Songs"]'); cats.push(name); localStorage.setItem('myAudioEqCategories', JSON.stringify(cats)); loadCategories(); } }
+        function removeCategory() {
+            const current = catSelect.value; if(current === "All Songs") { alert("Cannot remove All Songs"); return; }
+            if(confirm(`Delete category "${current}" and all its songs?`)) {
+                const tx = db.transaction("songs", "readwrite"); const store = tx.objectStore("songs");
+                store.getAll().onsuccess = e => { e.target.result.forEach(s => { if(s.category === current) store.delete(s.id); }); };
+                tx.oncomplete = () => { const cats = JSON.parse(localStorage.getItem('myAudioEqCategories') || '["All Songs"]'); const filtered = cats.filter(c => c !== current); localStorage.setItem('myAudioEqCategories', JSON.stringify(filtered)); loadCategories(); };
+            }
+        }
+        function deleteSong() { const id = parseFloat(librarySelect.value); if(id && confirm("Delete?")) { const tx = db.transaction(["songs"], "readwrite"); tx.objectStore("songs").delete(id); tx.oncomplete = () => refreshLibrary(); } }
+        document.getElementById('audioFile').addEventListener('change', e => { 
+            const files = Array.from(e.target.files); const currentCategory = catSelect.value; const store = db.transaction("songs").objectStore("songs");
+            store.getAll().onsuccess = event => {
+                const existingSongs = event.target.result; const tx = db.transaction(["songs"], "readwrite"); 
+                files.forEach(file => {
+                    const isDuplicate = existingSongs.some(s => s.name === file.name && s.category === currentCategory);
+                    if (isDuplicate) { alert(`Skipped duplicate: "${file.name}" in ${currentCategory}`); } else { tx.objectStore("songs").add({ id: Date.now() + Math.random(), name: file.name, data: file, category: currentCategory }); }
+                }); tx.oncomplete = () => refreshLibrary(); 
+            };
+        });
+        function loadCategories() { const cats = JSON.parse(localStorage.getItem('myAudioEqCategories')) || ["All Songs"]; catSelect.innerHTML = ""; cats.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.text = c; catSelect.appendChild(opt); }); refreshLibrary(); }
+        async function exportData() {
+            const tx = db.transaction("songs", "readonly"); const store = tx.objectStore("songs");
+            store.getAll().onsuccess = async (e) => {
+                const songs = e.target.result; const categories = JSON.parse(localStorage.getItem('myAudioEqCategories') || '["All Songs"]');
+                const parts = []; const manifest = { categories, songMetadata: [] };
+                for (let s of songs) { manifest.songMetadata.push({ id: s.id, name: s.name, category: s.category, size: s.data.size, type: s.data.type }); parts.push(s.data); }
+                const manifestBlob = new Blob([JSON.stringify(manifest) + "|||SPLIT|||"], {type: "text/plain"});
+                const finalBlob = new Blob([manifestBlob, ...parts], {type: "application/octet-stream"});
+                const url = URL.createObjectURL(finalBlob); const a = document.createElement('a'); a.href = url; a.download = `MyAudioEqApp.myaudio`; a.click();
+            };
+        }
+        async function importData(event) {
+            const file = event.target.files[0]; if (!file) return;
+            songTitleDisplay.textContent = "📂 Analyzing Backup...";
+            const headerBlob = file.slice(0, 500000); const headerBuffer = await headerBlob.arrayBuffer(); const view = new Uint8Array(headerBuffer); const decoder = new TextDecoder();
+            let splitIndex = -1; const searchString = "|||SPLIT|||"; const searchBytes = new TextEncoder().encode(searchString);
+            for (let i = 0; i < view.length; i++) { let match = true; for (let j = 0; j < searchBytes.length; j++) { if (view[i + j] !== searchBytes[j]) { match = false; break; } } if (match) { splitIndex = i; break; } }
+            if (splitIndex === -1) { alert("Invalid backup file."); return; }
+            const manifestStr = decoder.decode(view.subarray(0, splitIndex)); const manifest = JSON.parse(manifestStr); const headerOffset = splitIndex + searchBytes.length;
+            localStorage.setItem('myAudioEqCategories', JSON.stringify(manifest.categories));
+            const existingReq = db.transaction("songs", "readonly").objectStore("songs").getAll();
+            existingReq.onsuccess = async (ev) => {
+                const existingSongs = ev.target.result; const tx = db.transaction(["songs"], "readwrite"); const store = tx.objectStore("songs"); let offset = headerOffset;
+                for (let i = 0; i < manifest.songMetadata.length; i++) {
+                    const meta = manifest.songMetadata[i]; const songBlob = file.slice(offset, offset + meta.size);
+                    const isDuplicate = existingSongs.some(s => s.name === meta.name && s.category === meta.category);
+                    if (!isDuplicate) { store.put({ id: meta.id || (Date.now() + Math.random()), name: meta.name, category: meta.category, data: songBlob }); }
+                    offset += meta.size; const progress = Math.round(((i + 1) / manifest.songMetadata.length) * 100);
+                    songTitleDisplay.textContent = `📂 Restoring: ${progress}%`; progressBar.style.width = progress + "%";
+                }
+                tx.oncomplete = () => { alert("Import Successful! Duplicates were skipped."); location.reload(); };
+            };
+        }
+        loadCategories();
+</script>
+</body>
+</html>
